@@ -1,0 +1,383 @@
+
+
+---
+title: "TwitterAnalysis_CrewDragonSpaceX"
+output:
+  flexdashboard::flex_dashboard:
+    Orientation: columns
+    vertical_layout: scroll
+---
+
+
+```{r include=FALSE}
+if (!require(rtweet)) {install.packages('rtweet')}
+if (!require(magrittr)) {install.packages('magrittr')}
+if (!require(data.table)) {install.packages('data.table')}
+if (!require(ggplot2)) {install.packages('ggplot2')}
+if (!require(graphics)) {install.packages('graphics')}
+if (!require(topicmodels)) {install.packages('topicmodels')}
+if (!require(quanteda)) {install.packages('quanteda')}
+if (!require(stats)) {install.packages('stats')}
+if (!require(grDevices)) {install.packages('grDevices')}
+if (!require(utils)) {install.packages('utils')}
+if (!require(methods)) {install.packages('methods')}
+if (!require(utf8)) {install.packages('utf8')
+  }
+if (!require(dplyr)) {install.packages('dplyr')}
+if (!require(knitr)) {install.packages('knitr')}
+if (!require(tidytext)) {install.packages('tidytext')}
+if (!require(maps)) {install.packages('maps')}
+if (!require(ggthemes)) {install.packages('ggthemes')}
+if (!require(sentimentr)) {install.packages('sentimentr')}
+if (!require(vembedr)) {install.packages('vembedr')}
+
+
+
+#GlobalVariables - used inside the code
+words.to.remove <- c(stopwords("english"),'crewdragon',"crew","dragon","crew-1","crewdragon's","crewdragon's","@crewdragon","spacex")
+load(file="df_crewdragon.RData")
+df <- setDT(df)
+launchTime <- as.POSIXct("2020-11-16 00:27:00",tz="utc")
+dockTime <- as.POSIXct("2020-11-17 04:01:00",tz="utc")
+df_beforelaunch <- df[created_at<=launchTime]
+df_AfterDock <- df[created_at>=dockTime]
+df_afterLaunchBeforeDock <- df[created_at>launchTime & created_at<dockTime]
+
+df_Country <- lat_lng(df[!is.na(bbox_coords) & country!="",.(text,screen_name,coords_coords,bbox_coords,geo_coords)])
+
+
+#functions to be used in code
+
+createDf_Mat <- function(text) {
+  dfmat_corp_twitter <- text %>% corpus() %>% 
+    dfm(remove = words.to.remove,
+        what = "word",
+        stem = TRUE, 
+        remove_punct = TRUE,
+        remove_url=TRUE)
+  
+  dfmat_corp_twitter
+}
+
+createWordCloud <- function(text, wordsToRemove = words.to.remove) {
+  
+  textplot_wordcloud(createDf_Mat(text), min_count = 6, random_order = FALSE,
+                     rotation = .25,
+                     color = RColorBrewer::brewer.pal(8, "Dark2"))
+
+}
+
+
+createTopicPlot <- function(text){
+  
+dtm <- convert(createDf_Mat(text), to = "topicmodels")
+lda <- LDA(dtm, k = 4, control=list(seed=12))
+CrewDragon_topics <- tidy(lda, matrix = "beta")
+CrewDragon_top_terms <- CrewDragon_topics %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+CrewDragon_top_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  scale_y_reordered()
+  
+}
+  
+```
+
+
+
+# Intro {.sidebar}
+
+Twitter Analysis for CrewDragon, In this presentation we cover below topics
+
+* [Introduction]
+* [Hypothesis]
+* [Analysis and Infographics]
+* [Conclusion]
+
+# Introduction
+## Picture
+![*Fig 1.1 Crew Dragon Resilience (Dragon C207)*](SpaceX_Crew_Dragon.jpg){width=90%}
+
+**Introduction:**
+
+This report analyzes the twitter data of [crewDragonSpaceX.](https://en.wikipedia.org/wiki/SpaceX_Dragon_2)
+
+## Introduction
+
+**CrewDragon:**
+
+Crew Dragon, a space capsule capable of ferrying up to seven astronauts, and Cargo Dragon, an updated replacement for the original Dragon spacecraft.
+
+[Crew Dragon Resilience (Dragon C207)](https://en.wikipedia.org/wiki/Crew_Dragon_Resilience) is currently docked on orbit to the International Space Station (ISS) on the Crew-1 mission after launch at 00:27 UTC on November 16, 2020, resilience docked autonomously to the station at 04:01 UTC on Day 2 (November 17th, 2020) of the mission marking the first crewed operational flight of a Crew Dragon craft.
+
+**Data:**
+
+Data taken from <FromDate> to <ToDate> is considered for this analysis. There are 10379 tweets without any duplicates are available on this timeline.
+
+# Hypothesis
+## Column1
+
+**Hypothesis:**
+
+Public and media would be excited to see the first commercial program which carries the astronauts to International space station. And speaks about it successful docking to the space station.
+
+**Method:**
+
+Collect the tweet before and after the launch of spacecraft, the tweets collected were without retweets and only the original tweets.
+
+
+# Analysis and Infographics
+
+Column
+-------------------------------------
+
+### Data Summary
+
+Quick summary of the data , which will be used for analysis
+
+```{r echo=FALSE}
+
+crewdragon_summary <- df %>%
+    summarize( TotalTweets = n(),
+              start_timestamp = min(created_at), 
+              end_timestamp = max(created_at),
+              retweet_count=sum(retweet_count),
+              favorite_count = sum(favorite_count))
+kable(crewdragon_summary)
+```
+
+### WordCloud for the Complete Tweet Texts
+
+```{r echo=FALSE}
+createWordCloud(df$text)
+```
+
+### WordCloud for Tweet Texts After launch of Crew Dragon and before docking
+
+```{r echo=FALSE}
+createWordCloud(df_afterLaunchBeforeDock$text)
+```
+
+### Topic Modeling  for the Complete Tweet Texts, 4 topics
+
+```{r echo=FALSE}
+createTopicPlot(df$text)
+```
+
+### Topic Modeling  for Tweet Texts After launch of Crew Dragon and before docking, 4 topics
+
+```{r echo=FALSE}
+createTopicPlot(df_afterLaunchBeforeDock$text)
+```
+
+
+### Tweets Per Minute
+
+No. of tweets per minute about crewDragon
+```{r echo=FALSE}
+number.of.tweets <- 10379
+ggplot(df, aes(x=created_at)) +
+  geom_histogram(aes(y=..count..), 
+                 binwidth=60, 
+                 colour="springgreen3", 
+                 fill="blue", 
+                 alpha=0.8) + 
+  ggtitle(paste0("Activity ",number.of.tweets," tweets")) + 
+  scale_y_continuous(name="Number of Tweets per minute") + 
+  scale_x_datetime(name = "Time") +
+  theme_minimal(base_family="Times New Roman")
+```
+
+### Top10 shared URL,their retweetcount and favoritecount
+
+```{r echo=FALSE}
+library(tidyverse)
+df_groupURL <- df[!is.na(urls_url)] %>% group_by(urls_url) %>%
+  summarize(TweetCount=n(), RetweetCount = sum(retweet_count), favoriteCount = sum(favorite_count)) %>% 
+  arrange(desc(TweetCount)) %>% unnest(urls_url)
+kable(df_groupURL[1:10,])
+```
+
+Column
+-------------------------------------
+
+### Reachability per tweet
+
+```{r echo=FALSE}
+#Graphing
+library(ggplot2)
+ggplot(df, aes(x=created_at, y=(friends_count+1))) +
+  geom_point() +
+  scale_x_datetime(name = "Time") +
+  scale_y_log10(name = "Potential Reach", breaks = c(10,100,1000,10000) ) +
+  theme_minimal()
+```
+
+
+### WordCloud for the Tweet texts before Launch
+
+```{r echo=FALSE}
+createWordCloud(df_beforelaunch$text)
+```
+
+### WordCloud for the Tweet texts after docking
+
+```{r echo=FALSE}
+createWordCloud(df_AfterDock$text)
+```
+
+### Topic Modeling  for the Tweet texts before Launch, 4 topics
+
+```{r echo=FALSE}
+createTopicPlot(df_beforelaunch$text)
+```
+
+### Topic Modeling  for Tweet texts after docking, 4 topics
+
+```{r echo=FALSE}
+createTopicPlot(df_AfterDock$text)
+```
+
+### Tweet Locations
+
+```{r echo=FALSE}
+# create basemap of the globe
+world_basemap <- ggplot() +
+  borders("world", colour = "gray85", fill = "gray80") +
+  theme_map()
+world_basemap +
+      geom_point(data = df_Country, aes(x = lng, y = lat),
+              colour = 'purple', alpha = .5) +
+   scale_size_continuous(range = c(1, 8),
+                         breaks = c(250, 500, 750, 1000)) +
+   labs(title = "Tweet Locations for the records with coordinates populated")
+
+```
+
+### StemmedWords
+
+
+```{r echo=FALSE}
+library(ggplot2)
+library(data.table)
+dfFreq <- textstat_frequency(createDf_Mat(df$text)) %>% as.data.table
+ggplot(dfFreq[1:20,], aes(x=reorder(feature, -rank), y=frequency)) + 
+  geom_col() +
+  coord_flip() +
+  labs(x = "Stemmed word", y = "Count") +
+  theme_minimal(base_family="Times New Roman")
+
+```
+
+
+
+
+### 3-grams occurrences
+
+
+```{r echo=FALSE}
+tok_tweets <- df$text %>% 
+  gsub("#","", .) %>% 
+  corpus %>% 
+  tokens(what="word",
+         remove_numbers=TRUE,
+         remove_punct=TRUE,
+         remove_symbols=TRUE,
+         remove_separators=TRUE,
+         remove_url=TRUE)
+tok_tweets <- tokens_remove(tok_tweets,stopwords(language = "en"))
+
+TokensStemmed <- tokens_remove(tok_tweets, words.to.remove)
+
+dfm2 <- dfm(tokens_ngrams(TokensStemmed,n=3))
+
+dfFreq2 <- textstat_frequency(dfm2)
+
+ggplot(dfFreq2[1:40,], aes(x=reorder(feature, frequency), y=frequency)) + 
+  geom_col() +
+  coord_flip() +
+  scale_x_discrete(name = "3 gram") +
+  theme(text=element_text(size=12, family="Times New Roman"))
+
+
+```
+
+
+
+### Sentimental analysis
+
+
+
+
+
+```{r echo=FALSE}
+
+dfmat_corp_twitter <- createDf_Mat(df$text)
+dtm <- convert(dfmat_corp_twitter, to = "topicmodels")
+lda <- LDA(dtm, k = 6, control=list(seed=12))
+topicAssignment =   data.table(
+      index = lda %>% 
+         topics %>% 
+         names %>% 
+         gsub("text","", .) 
+      %>% as.integer,
+      topic = lda %>% topics
+   )
+
+df$Topic = NA # creates a new col ‘topic’, assign it to NA
+df$Topic[topicAssignment$index] = topicAssignment$topic
+
+df_senti <- df[,.(created_at,text,Topic)]
+
+df_senti$Timeline <- ifelse(df_senti$created_at <= launchTime,"Before Launch",
+                      ifelse(df_senti$created_at >= dockTime,"After Dock", "After Launch, Before Dock" ) )
+df_senti$Date <- as.Date(df$created_at)
+
+
+sentiment_by_tweet = 
+  df_senti[,
+     list(text %>% get_sentences %>% sentiment_by(),
+          Topic)]
+
+
+sentiment_by_Topic = 
+  sentiment_by_tweet[, list(Tweets = .N,
+                            ave_sentiment = mean(ave_sentiment),
+                            sd_sentiment = sd(ave_sentiment),
+                            Total_word_count = sum(word_count)),
+                     by = Topic]
+
+
+
+df_senti$polarity_score = sentiment_by_tweet$ave_sentiment
+
+
+ggplot(df_senti,aes(x=Timeline, y=polarity_score, fill = Timeline)) + 
+  geom_boxplot() +
+  guides(fill=FALSE) + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+```
+
+
+# Conclusion
+## Column1
+
+**Conclusion:**
+
+In twitter media, there are more tweets during the time of launch and docking, i.e on the 16th November and 17th November. People are speaking more about Nasa, SpaceX, Success, First Mission, America etc. People are more sentimental towards its success and infact americans shows their patriotism by praising America on the tweets.
+
+Secondly, only developed and developing nations where speaking most on this topic . Number of tweets are not more from Asia , Africa and South America continents.
+
+Thirdly, the excitement before launch and during launch is more. After docking it is gradually reduced. And no much of talk after 18th.
+
+```{r echo=FALSE}
+embed_url("https://www.youtube.com/watch?v=PYLhLA_sv6E")
+```
